@@ -1,0 +1,41 @@
+# Node & NPM
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Visual Studio Code & Extension Build
+extension/out/
+extension/dist/
+dist-extension/
+*.vsix
+.vscode/
+.vscode-test/
+
+# Tauri & Rust Build
+app/src-tauri/target/
+app/dist/
+app/src-tauri/gen/
+
+# BoloCode Local Data & Runtime Instance Files
+.bolocode/
+wakeword.rpw
+wakeword_samples/
+
+# OS Specific
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Environment & Secret files
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Logs
+logs/
+*.log

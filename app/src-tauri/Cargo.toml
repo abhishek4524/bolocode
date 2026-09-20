@@ -1,0 +1,39 @@
+[package]
+name = "bolocode"
+version = "0.1.0"
+description = "BoloCode Voice Agent Desktop App"
+authors = ["BoloCode Team"]
+edition = "2021"
+
+[lib]
+name = "bolocode_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.0.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.0.0", features = [] }
+tauri-plugin-shell = "2.0.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.36", features = ["full"] }
+reqwest = { version = "0.11", features = ["json", "multipart"] }
+keyring = "2.1"
+tokio-tungstenite = "0.21"
+futures-util = "0.3"
+anyhow = "1.0"
+base64 = "0.21"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+rustpotter = "3.0.2"
+cpal = "0.15"
+hound = "3.5"
+half = "=2.4.1"
+rand_distr = "=0.4.3"
+chrono = "0.4"
+lazy_static = "1.4"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

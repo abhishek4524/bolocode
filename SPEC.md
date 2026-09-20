@@ -44,8 +44,8 @@ BoloCode is a downloadable voice-first coding agent for Windows, macOS, and Linu
 
 ### End-to-End Voice Control Flow
 
-1. **Trigger**: User presses hotkey (e.g., `Ctrl+Space` / `Cmd+Option+B`) or says wake word (*"Hey Bolo"*).
-2. **Audio Capture**: App records microphone input using Voice Activity Detection (VAD) to trim silence.
+1. **Trigger**: User presses hotkey (e.g., `Ctrl+Shift+Space`) or says custom wake word (*"Hey Bolo"*), detected on-device via the **Rustpotter** background engine (`cpal` mic capture with in-app `.rpw` model training).
+2. **Audio Capture**: App records microphone input using Voice Activity Detection (VAD) to trim silence. The wake word listener automatically pauses during STT recording and TTS playback to prevent mic contention.
 3. **Speech-to-Text (STT)**: Audio buffer is sent via Rust command to Groq Whisper API (`whisper-large-v3-turbo` by default).
 4. **LLM Orchestration**:
    - Transcribed text sent to Groq (`llama-3.3-70b-versatile` by default).

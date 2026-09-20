@@ -1,0 +1,24 @@
+{
+  "name": "bolocode-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "BoloCode - Voice-First Coding Agent for VS Code",
+  "workspaces": [
+    "app",
+    "extension"
+  ],
+  "scripts": {
+    "build:extension": "npm run --prefix extension build",
+    "build:app": "npm run --prefix app build",
+    "test": "npm run --prefix extension test"
+  },
+  "keywords": [
+    "tauri",
+    "vscode-extension",
+    "voice-agent",
+    "groq",
+    "whisper"
+  ],
+  "author": "BoloCode Team",
+  "license": "MIT"
+}
