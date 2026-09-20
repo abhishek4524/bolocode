@@ -117,6 +117,22 @@ pub fn save_app_settings(config: AppConfig) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn toggle_mute_cmd() -> Result<bool, String> {
+    let mut cfg = load_config();
+    cfg.mute_agent_voice = !cfg.mute_agent_voice;
+    save_cfg(&cfg)?;
+    Ok(cfg.mute_agent_voice)
+}
+
+#[tauri::command]
+pub fn toggle_pause_listening_cmd() -> Result<bool, String> {
+    let mut cfg = load_config();
+    cfg.pause_listening = !cfg.pause_listening;
+    save_cfg(&cfg)?;
+    Ok(cfg.pause_listening)
+}
+
+#[tauri::command]
 pub async fn call_tool(
     name: String,
     args: Value,

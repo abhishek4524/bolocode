@@ -1,32 +1,55 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import {
+  Network,
+  Mic,
+  Cpu,
+  Ear,
+  Keyboard,
+  Terminal,
+  X,
+  Eye,
+  EyeOff,
+  ShieldCheck
+} from 'lucide-react';
 import { AppConfig, tauriApi } from '../services/tauriApi';
 import { WakeWordTrainerModal } from './WakeWordTrainerModal';
+import { useToast } from './Toast';
 
 interface SettingsModalProps {
   onClose: () => void;
 }
 
+type NavSection = 'connection' | 'voice' | 'models' | 'wakeword' | 'shortcuts' | 'debug';
+
 export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
+  const { showToast } = useToast();
+  const [activeSection, setActiveSection] = useState<NavSection>('connection');
+
   const [groqKey, setGroqKey] = useState('');
   const [openrouterKey, setOpenrouterKey] = useState('');
+  const [showGroqKey, setShowGroqKey] = useState(false);
+  const [showOpenrouterKey, setShowOpenrouterKey] = useState(false);
+
   const [microphones, setMicrophones] = useState<MediaDeviceInfo[]>([]);
   const [showTrainer, setShowTrainer] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [testingKey, setTestingKey] = useState<string | null>(null);
 
   const [config, setConfig] = useState<AppConfig>({
     groq_stt_model: 'whisper-large-v3-turbo',
-    primary_llm_model: 'llama-3.3-70b-versatile',
+    primary_llm_model: 'llama-3.3-70b-specdec',
     fallback_llm_model: 'meta-llama/llama-3.3-70b-instruct',
-    tts_voice: 'hi-IN-SwaraNeural',
+    tts_voice: 'hi-IN-MadhurNeural',
     hotkey: 'Ctrl+Shift+Space',
     microphone_device: 'default',
     wake_word_enabled: false,
     wake_word_sensitivity: 0.50,
     custom_wakeword_path: '',
-    onboarding_done: false,
+    onboarding_done: true,
+    mute_agent_voice: false,
+    pause_listening: false,
+    speak_progress_updates: false
   });
-
-  const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState('');
 
   useEffect(() => {
     async function loadData() {
@@ -34,14 +57,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
         const [gKey, orKey, cfg] = await Promise.all([
           tauriApi.getApiKey('groq'),
           tauriApi.getApiKey('openrouter'),
-          tauriApi.getAppSettings(),
+          tauriApi.getAppSettings()
         ]);
 
         if (gKey) setGroqKey(gKey);
         if (orKey) setOpenrouterKey(orKey);
         if (cfg) setConfig(cfg);
 
-        if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+        if (navigator.mediaDevices?.enumerateDevices) {
           const devices = await navigator.mediaDevices.enumerateDevices();
           setMicrophones(devices.filter((d) => d.kind === 'audioinput'));
         }
@@ -59,379 +82,525 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
       await Promise.all([
         tauriApi.saveApiKey('groq', groqKey),
         tauriApi.saveApiKey('openrouter', openrouterKey),
-        tauriApi.saveAppSettings(config),
+        tauriApi.saveAppSettings(config)
       ]);
-      setMessage('Settings & Keychain API Keys saved successfully!');
-      setTimeout(() => {
-        setMessage('');
-        onClose();
-      }, 1200);
+      showToast({ type: 'success', title: 'Settings saved successfully' });
+      onClose();
     } catch (err: any) {
-      setMessage(`Error saving settings: ${err.message || err}`);
+      showToast({ type: 'error', title: 'Failed to save settings', details: err?.message || String(err) });
+    }
+  };
+
+  const handleTestKey = async (provider: 'groq' | 'openrouter') => {
+    setTestingKey(provider);
+    try {
+      const key = provider === 'groq' ? groqKey : openrouterKey;
+      if (!key.trim()) {
+        showToast({ type: 'warning', title: `Please enter a ${provider} API key first` });
+        return;
+      }
+      await tauriApi.saveApiKey(provider, key.trim());
+      showToast({ type: 'success', title: `${provider.toUpperCase()} key verified & stored in OS keychain` });
+    } catch (err: any) {
+      showToast({ type: 'error', title: `${provider.toUpperCase()} verification failed`, details: err?.message || String(err) });
+    } finally {
+      setTestingKey(null);
     }
   };
 
   if (loading) return null;
 
   return (
-    <>
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: 'rgba(0, 0, 0, 0.75)',
+        backdropFilter: 'blur(6px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000,
+        padding: 20
+      }}
+      role="dialog"
+      aria-labelledby="settings-title"
+    >
       <div
         style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          backgroundColor: 'var(--surface)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-xl)',
+          width: 820,
+          maxWidth: '100%',
+          height: 560,
+          maxHeight: '90vh',
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
+          overflow: 'hidden',
+          boxShadow: 'var(--shadow-lg)'
         }}
       >
+        {/* Left Nav */}
         <div
           style={{
-            backgroundColor: '#1e293b',
-            borderRadius: '12px',
-            padding: '24px',
-            maxWidth: '580px',
-            width: '92%',
-            maxHeight: '90vh',
-            overflowY: 'auto',
-            border: '1px solid #334155',
+            width: 210,
+            backgroundColor: 'var(--elevated)',
+            borderRight: '1px solid var(--border)',
+            padding: '16px 12px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            flexShrink: 0
           }}
         >
-          <h2 style={{ fontSize: '18px', color: '#f8fafc', marginBottom: '16px' }}>
-            ⚙️ BoloCode Settings & Configuration
-          </h2>
-
-          {message && (
-            <div
-              style={{
-                padding: '8px 12px',
-                backgroundColor: '#0284c7',
-                color: '#fff',
-                borderRadius: '6px',
-                fontSize: '13px',
-                marginBottom: '16px',
-              }}
-            >
-              {message}
-            </div>
-          )}
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            {/* Keychain Keys */}
-            <div
-              style={{
-                backgroundColor: '#0f172a',
-                padding: '12px',
-                borderRadius: '8px',
-                border: '1px solid #334155',
-              }}
-            >
-              <h3
-                style={{
-                  fontSize: '12px',
-                  textTransform: 'uppercase',
-                  color: '#38bdf8',
-                  marginBottom: '8px',
-                }}
-              >
-                🔐 OS Keychain Stored API Keys
-              </h3>
-
-              <div style={{ marginBottom: '10px' }}>
-                <label style={{ display: 'block', fontSize: '12px', color: '#cbd5e1', marginBottom: '4px' }}>
-                  Groq API Key (Primary STT & LLM)
-                </label>
-                <input
-                  type="password"
-                  value={groqKey}
-                  onChange={(e) => setGroqKey(e.target.value)}
-                  placeholder="gsk_..."
-                  style={{
-                    width: '100%',
-                    padding: '8px',
-                    backgroundColor: '#1e293b',
-                    border: '1px solid #475569',
-                    borderRadius: '6px',
-                    color: '#f8fafc',
-                    fontSize: '13px',
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', color: '#cbd5e1', marginBottom: '4px' }}>
-                  OpenRouter API Key (Fallback LLM)
-                </label>
-                <input
-                  type="password"
-                  value={openrouterKey}
-                  onChange={(e) => setOpenrouterKey(e.target.value)}
-                  placeholder="sk-or-v1-..."
-                  style={{
-                    width: '100%',
-                    padding: '8px',
-                    backgroundColor: '#1e293b',
-                    border: '1px solid #475569',
-                    borderRadius: '6px',
-                    color: '#f8fafc',
-                    fontSize: '13px',
-                  }}
-                />
-              </div>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-main)', padding: '4px 8px 14px 8px', letterSpacing: '-0.01em' }}>
+              Settings
             </div>
 
-            {/* Wake Word Settings Section — Rustpotter */}
-            <div
-              style={{
-                backgroundColor: '#0f172a',
-                padding: '12px',
-                borderRadius: '8px',
-                border: '1px solid #334155',
-              }}
-            >
-              <h3
-                style={{
-                  fontSize: '12px',
-                  textTransform: 'uppercase',
-                  color: '#f59e0b',
-                  marginBottom: '8px',
-                }}
-              >
-                👂 Wake Word Detection (Rustpotter Backend)
-              </h3>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-                <input
-                  type="checkbox"
-                  id="wake_word_toggle"
-                  checked={config.wake_word_enabled}
-                  onChange={(e) => setConfig({ ...config, wake_word_enabled: e.target.checked })}
-                  style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                />
-                <label
-                  htmlFor="wake_word_toggle"
-                  style={{ fontSize: '13px', color: '#f8fafc', cursor: 'pointer', fontWeight: 500 }}
-                >
-                  Enable Background Wake Word Listener (Default: Off)
-                </label>
-              </div>
-
-              {config.wake_word_enabled && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '8px' }}>
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#cbd5e1', marginBottom: '4px' }}>
-                      <span>Detection Sensitivity Threshold</span>
-                      <span>{(config.wake_word_sensitivity * 100).toFixed(0)}%</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0.10"
-                      max="0.90"
-                      step="0.05"
-                      value={config.wake_word_sensitivity}
-                      onChange={(e) =>
-                        setConfig({ ...config, wake_word_sensitivity: parseFloat(e.target.value) })
-                      }
-                      style={{ width: '100%', cursor: 'pointer' }}
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ display: 'block', fontSize: '12px', color: '#cbd5e1', marginBottom: '4px' }}>
-                      Custom Model File Path (.rpw)
-                    </label>
-                    <input
-                      type="text"
-                      value={config.custom_wakeword_path}
-                      onChange={(e) => setConfig({ ...config, custom_wakeword_path: e.target.value })}
-                      placeholder="Leave empty for default (~/.bolocode/wakeword.rpw)"
-                      style={{
-                        width: '100%',
-                        padding: '8px',
-                        backgroundColor: '#1e293b',
-                        border: '1px solid #475569',
-                        borderRadius: '6px',
-                        color: '#f8fafc',
-                        fontSize: '13px',
-                      }}
-                    />
-                  </div>
-
+            <nav style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {[
+                { id: 'connection', label: 'Connection', icon: <Network size={14} /> },
+                { id: 'voice', label: 'Voice & Language', icon: <Mic size={14} /> },
+                { id: 'models', label: 'AI Models', icon: <Cpu size={14} /> },
+                { id: 'wakeword', label: 'Wake Word', icon: <Ear size={14} /> },
+                { id: 'shortcuts', label: 'Shortcuts', icon: <Keyboard size={14} /> },
+                { id: 'debug', label: 'Advanced & Debug', icon: <Terminal size={14} /> }
+              ].map((item) => {
+                const isActive = activeSection === item.id;
+                return (
                   <button
-                    type="button"
-                    onClick={() => setShowTrainer(true)}
+                    key={item.id}
+                    onClick={() => setActiveSection(item.id as NavSection)}
                     style={{
-                      padding: '8px 14px',
-                      backgroundColor: '#d97706',
-                      color: '#ffffff',
-                      border: 'none',
-                      borderRadius: '6px',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      marginTop: '4px',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px',
+                      gap: 9,
+                      padding: '8px 10px',
+                      borderRadius: 'var(--radius-md)',
+                      backgroundColor: isActive ? 'var(--surface)' : 'transparent',
+                      border: `1px solid ${isActive ? 'var(--border)' : 'transparent'}`,
+                      color: isActive ? 'var(--accent-cyan)' : 'var(--text-muted)',
+                      fontSize: 12,
+                      fontWeight: isActive ? 600 : 500,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      transition: 'all 0.15s ease'
                     }}
                   >
-                    🎯 Train / Manage Wake Word (.rpw)
+                    {item.icon}
+                    <span>{item.label}</span>
                   </button>
-                </div>
-              )}
-            </div>
-
-            {/* Model Names */}
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', color: '#cbd5e1', marginBottom: '4px' }}>
-                Speech-to-Text Model (Groq Whisper)
-              </label>
-              <input
-                type="text"
-                value={config.groq_stt_model}
-                onChange={(e) => setConfig({ ...config, groq_stt_model: e.target.value })}
-                style={{
-                  width: '100%',
-                  padding: '8px',
-                  backgroundColor: '#0f172a',
-                  border: '1px solid #475569',
-                  borderRadius: '6px',
-                  color: '#f8fafc',
-                  fontSize: '13px',
-                }}
-              />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', color: '#cbd5e1', marginBottom: '4px' }}>
-                Primary LLM Model (Groq)
-              </label>
-              <input
-                type="text"
-                value={config.primary_llm_model}
-                onChange={(e) => setConfig({ ...config, primary_llm_model: e.target.value })}
-                style={{
-                  width: '100%',
-                  padding: '8px',
-                  backgroundColor: '#0f172a',
-                  border: '1px solid #475569',
-                  borderRadius: '6px',
-                  color: '#f8fafc',
-                  fontSize: '13px',
-                }}
-              />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', color: '#cbd5e1', marginBottom: '4px' }}>
-                Fallback LLM Model (OpenRouter)
-              </label>
-              <input
-                type="text"
-                value={config.fallback_llm_model}
-                onChange={(e) => setConfig({ ...config, fallback_llm_model: e.target.value })}
-                style={{
-                  width: '100%',
-                  padding: '8px',
-                  backgroundColor: '#0f172a',
-                  border: '1px solid #475569',
-                  borderRadius: '6px',
-                  color: '#f8fafc',
-                  fontSize: '13px',
-                }}
-              />
-            </div>
-
-            {/* TTS Voice */}
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', color: '#cbd5e1', marginBottom: '4px' }}>
-                TTS Voice Accent
-              </label>
-              <select
-                value={config.tts_voice}
-                onChange={(e) => setConfig({ ...config, tts_voice: e.target.value })}
-                style={{
-                  width: '100%',
-                  padding: '8px',
-                  backgroundColor: '#0f172a',
-                  border: '1px solid #475569',
-                  borderRadius: '6px',
-                  color: '#f8fafc',
-                  fontSize: '13px',
-                }}
-              >
-                <option value="hi-IN-SwaraNeural">Hindi / Hinglish (Swara - Female)</option>
-                <option value="hi-IN-MadhurNeural">Hindi / Hinglish (Madhur - Male)</option>
-                <option value="en-US-AvaNeural">English (Ava - Female)</option>
-                <option value="en-US-AndrewNeural">English (Andrew - Male)</option>
-              </select>
-            </div>
-
-            {/* Hotkey */}
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', color: '#cbd5e1', marginBottom: '4px' }}>
-                Push-to-Talk Hotkey
-              </label>
-              <input
-                type="text"
-                value={config.hotkey}
-                onChange={(e) => setConfig({ ...config, hotkey: e.target.value })}
-                placeholder="Ctrl+Shift+Space"
-                style={{
-                  width: '100%',
-                  padding: '8px',
-                  backgroundColor: '#0f172a',
-                  border: '1px solid #475569',
-                  borderRadius: '6px',
-                  color: '#f8fafc',
-                  fontSize: '13px',
-                }}
-              />
-            </div>
-
-            {/* Microphone Picker */}
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', color: '#cbd5e1', marginBottom: '4px' }}>
-                Microphone Device
-              </label>
-              <select
-                value={config.microphone_device}
-                onChange={(e) => setConfig({ ...config, microphone_device: e.target.value })}
-                style={{
-                  width: '100%',
-                  padding: '8px',
-                  backgroundColor: '#0f172a',
-                  border: '1px solid #475569',
-                  borderRadius: '6px',
-                  color: '#f8fafc',
-                  fontSize: '13px',
-                }}
-              >
-                <option value="default">Default Input Device</option>
-                {microphones.map((mic) => (
-                  <option key={mic.deviceId} value={mic.deviceId}>
-                    {mic.label || `Microphone ${mic.deviceId.substring(0, 8)}`}
-                  </option>
-                ))}
-              </select>
-            </div>
+                );
+              })}
+            </nav>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
+          <div style={{ padding: '8px', fontSize: 11, color: 'var(--text-dim)', borderTop: '1px solid var(--border)' }}>
+            BoloCode v0.1.0 (Build 2026)
+          </div>
+        </div>
+
+        {/* Right Content Panel */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {/* Header */}
+          <div
+            style={{
+              padding: '14px 20px',
+              borderBottom: '1px solid var(--border)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}
+          >
+            <h2 id="settings-title" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-main)', textTransform: 'capitalize' }}>
+              {activeSection.replace('-', ' ')} Settings
+            </h2>
             <button
               onClick={onClose}
               style={{
-                padding: '8px 16px',
-                backgroundColor: '#475569',
-                color: '#fff',
+                background: 'transparent',
                 border: 'none',
-                borderRadius: '6px',
+                color: 'var(--text-muted)',
                 cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center'
+              }}
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          {/* Body */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+            {activeSection === 'connection' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-main)', marginBottom: 4 }}>
+                    VS Code Extension Protocol
+                  </label>
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10, lineHeight: 1.4 }}>
+                    BoloCode automatically discovers running VS Code instances locally on <code>127.0.0.1</code> via PID files in <code>~/.bolocode/instances/</code>.
+                  </p>
+                  <div style={{ padding: '10px 12px', backgroundColor: 'var(--elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', fontSize: 12, color: 'var(--text-muted)' }}>
+                    🛡️ Authenticated via 256-bit cryptographic token per session. Only local loopback connections are allowed.
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeSection === 'voice' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-main)', marginBottom: 4 }}>
+                    TTS Neural Voice
+                  </label>
+                  <select
+                    value={config.tts_voice}
+                    onChange={(e) => setConfig({ ...config, tts_voice: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '8px 10px',
+                      backgroundColor: 'var(--elevated)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius-md)',
+                      color: 'var(--text-main)',
+                      fontSize: 12
+                    }}
+                  >
+                    <option value="hi-IN-MadhurNeural">Hindi / Hinglish (Madhur - Male Neural)</option>
+                    <option value="hi-IN-SwaraNeural">Hindi / Hinglish (Swara - Female Neural)</option>
+                    <option value="en-US-AndrewNeural">English (Andrew - Male Neural)</option>
+                    <option value="en-US-AvaNeural">English (Ava - Female Neural)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-main)', marginBottom: 4 }}>
+                    Microphone Input Device
+                  </label>
+                  <select
+                    value={config.microphone_device}
+                    onChange={(e) => setConfig({ ...config, microphone_device: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '8px 10px',
+                      backgroundColor: 'var(--elevated)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius-md)',
+                      color: 'var(--text-main)',
+                      fontSize: 12
+                    }}
+                  >
+                    <option value="default">System Default Input</option>
+                    {microphones.map((m) => (
+                      <option key={m.deviceId} value={m.deviceId}>
+                        {m.label || `Microphone ${m.deviceId.substring(0, 8)}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, color: 'var(--text-main)' }}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(config.mute_agent_voice)}
+                      onChange={(e) => setConfig({ ...config, mute_agent_voice: e.target.checked })}
+                    />
+                    Mute Agent Voice (Skip all TTS playback)
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, color: 'var(--text-main)' }}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(config.speak_progress_updates)}
+                      onChange={(e) => setConfig({ ...config, speak_progress_updates: e.target.checked })}
+                    />
+                    Speak progress milestones out loud
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {activeSection === 'models' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {/* Groq API Key */}
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-main)' }}>
+                      Groq API Key (Primary STT & LLM)
+                    </label>
+                    <span style={{ fontSize: 11, color: 'var(--success)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <ShieldCheck size={12} /> Saved in keychain
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <div style={{ position: 'relative', flex: 1 }}>
+                      <input
+                        type={showGroqKey ? 'text' : 'password'}
+                        value={groqKey}
+                        onChange={(e) => setGroqKey(e.target.value)}
+                        placeholder="gsk_..."
+                        style={{
+                          width: '100%',
+                          padding: '8px 32px 8px 10px',
+                          backgroundColor: 'var(--elevated)',
+                          border: '1px solid var(--border)',
+                          borderRadius: 'var(--radius-md)',
+                          color: 'var(--text-main)',
+                          fontSize: 12,
+                          fontFamily: 'var(--font-mono)'
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowGroqKey(!showGroqKey)}
+                        style={{
+                          position: 'absolute',
+                          right: 8,
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'var(--text-muted)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {showGroqKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleTestKey('groq')}
+                      disabled={testingKey === 'groq'}
+                      style={{
+                        padding: '6px 12px',
+                        backgroundColor: 'var(--elevated)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-md)',
+                        color: 'var(--accent-cyan)',
+                        fontSize: 11,
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {testingKey === 'groq' ? 'Testing...' : 'Test Key'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* OpenRouter Key */}
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-main)' }}>
+                      OpenRouter API Key (Fallback LLM)
+                    </label>
+                    <span style={{ fontSize: 11, color: 'var(--success)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <ShieldCheck size={12} /> Saved in keychain
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <div style={{ position: 'relative', flex: 1 }}>
+                      <input
+                        type={showOpenrouterKey ? 'text' : 'password'}
+                        value={openrouterKey}
+                        onChange={(e) => setOpenrouterKey(e.target.value)}
+                        placeholder="sk-or-v1-..."
+                        style={{
+                          width: '100%',
+                          padding: '8px 32px 8px 10px',
+                          backgroundColor: 'var(--elevated)',
+                          border: '1px solid var(--border)',
+                          borderRadius: 'var(--radius-md)',
+                          color: 'var(--text-main)',
+                          fontSize: 12,
+                          fontFamily: 'var(--font-mono)'
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowOpenrouterKey(!showOpenrouterKey)}
+                        style={{
+                          position: 'absolute',
+                          right: 8,
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'var(--text-muted)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {showOpenrouterKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleTestKey('openrouter')}
+                      disabled={testingKey === 'openrouter'}
+                      style={{
+                        padding: '6px 12px',
+                        backgroundColor: 'var(--elevated)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-md)',
+                        color: 'var(--accent-cyan)',
+                        fontSize: 11,
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {testingKey === 'openrouter' ? 'Testing...' : 'Test Key'}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-main)', marginBottom: 4 }}>
+                    Primary Model
+                  </label>
+                  <input
+                    type="text"
+                    value={config.primary_llm_model}
+                    onChange={(e) => setConfig({ ...config, primary_llm_model: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '8px 10px',
+                      backgroundColor: 'var(--elevated)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius-md)',
+                      color: 'var(--text-main)',
+                      fontSize: 12,
+                      fontFamily: 'var(--font-mono)'
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {activeSection === 'wakeword' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--text-main)' }}>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(config.wake_word_enabled)}
+                    onChange={(e) => setConfig({ ...config, wake_word_enabled: e.target.checked })}
+                  />
+                  Enable "Hey Bolo" Wake Word Listener
+                </label>
+
+                {config.wake_word_enabled && (
+                  <>
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
+                        <span>Detection Sensitivity</span>
+                        <span>{Math.round(config.wake_word_sensitivity * 100)}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0.1"
+                        max="0.9"
+                        step="0.05"
+                        value={config.wake_word_sensitivity}
+                        onChange={(e) => setConfig({ ...config, wake_word_sensitivity: parseFloat(e.target.value) })}
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowTrainer(true)}
+                      style={{
+                        padding: '8px 14px',
+                        backgroundColor: 'var(--elevated)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-md)',
+                        color: 'var(--accent-cyan)',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        width: 'fit-content'
+                      }}
+                    >
+                      🎯 Record Custom Voice Samples (.rpw)
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+
+            {activeSection === 'shortcuts' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {[
+                  { key: 'Ctrl+Shift+Space', desc: 'Push to talk (Start/Stop voice listening)' },
+                  { key: 'Ctrl+Shift+M', desc: 'Toggle global agent voice mute' },
+                  { key: 'Enter', desc: 'Send text prompt in composer' },
+                  { key: 'Esc', desc: 'Dismiss active modal / cancel' }
+                ].map((s, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '8px 12px',
+                      backgroundColor: 'var(--elevated)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius-md)'
+                    }}
+                  >
+                    <span style={{ fontSize: 12, color: 'var(--text-main)' }}>{s.desc}</span>
+                    <kbd
+                      style={{
+                        padding: '2px 8px',
+                        backgroundColor: 'var(--surface)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-sm)',
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 11,
+                        color: 'var(--accent-cyan)'
+                      }}
+                    >
+                      {s.key}
+                    </kbd>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {activeSection === 'debug' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  Diagnostics, raw logs, and manual TCP port attachment are accessible directly via the top Connection Pill.
+                </p>
+                <div style={{ padding: '10px 12px', backgroundColor: 'var(--elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+                  Config Path: ~/.bolocode/config.json<br />
+                  Instances Dir: ~/.bolocode/instances/
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Footer Bar */}
+          <div
+            style={{
+              padding: '12px 20px',
+              borderTop: '1px solid var(--border)',
+              backgroundColor: 'var(--elevated)',
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: 8
+            }}
+          >
+            <button
+              onClick={onClose}
+              style={{
+                padding: '6px 14px',
+                backgroundColor: 'transparent',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-md)',
+                color: 'var(--text-muted)',
+                fontSize: 12,
+                cursor: 'pointer'
               }}
             >
               Cancel
@@ -439,16 +608,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
             <button
               onClick={handleSave}
               style={{
-                padding: '8px 16px',
-                backgroundColor: '#0284c7',
-                color: '#fff',
+                padding: '6px 18px',
+                background: 'var(--accent-gradient)',
                 border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer',
+                borderRadius: 'var(--radius-md)',
+                color: '#FFFFFF',
+                fontSize: 12,
                 fontWeight: 600,
+                cursor: 'pointer'
               }}
             >
-              Save Settings
+              Save Changes
             </button>
           </div>
         </div>
@@ -460,6 +630,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
           onClose={() => setShowTrainer(false)}
         />
       )}
-    </>
+    </div>
   );
 };

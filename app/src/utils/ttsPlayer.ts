@@ -9,13 +9,13 @@ export function autoDetectVoice(text: string, userDefaultVoice?: string): string
 
   // Check for Devanagari script or Hindi/Hinglish keywords
   const containsDevanagari = /[\u0900-\u097F]/.test(text);
-  const containsHinglishKeywords = /\b(hai|kar|diya|banao|batao|aap|ho|gaya|karo|sab|nahin|haan|pakka|chahiye)\b/i.test(text);
+  const containsHinglishKeywords = /\b(hai|kar|diya|banao|batao|aap|ho|gaya|karo|sab|nahin|haan|pakka|chahiye|pe|me|ki|ka|se|par)\b/i.test(text);
 
   if (containsDevanagari || containsHinglishKeywords) {
-    return 'hi-IN-SwaraNeural';
+    return 'hi-IN-MadhurNeural';
   }
 
-  return 'en-US-AvaNeural';
+  return 'en-US-AndrewNeural';
 }
 
 export function stopSpeaking() {
@@ -30,7 +30,17 @@ export function stopSpeaking() {
   }
 }
 
-export async function speakReply(text: string, userVoiceSetting?: string): Promise<void> {
+export async function speakReply(
+  text: string,
+  userVoiceSetting?: string,
+  options?: { muted?: boolean }
+): Promise<void> {
+  // If muted, stop any active audio immediately and skip network TTS completely
+  if (options?.muted) {
+    stopSpeaking();
+    return;
+  }
+
   if (!text || text.trim() === '') return;
 
   // Immediate stop previous playback (barge-in safeguard)
@@ -47,13 +57,26 @@ export async function speakReply(text: string, userVoiceSetting?: string): Promi
       return;
     }
   } catch (err) {
-    console.warn('Rust Edge TTS failed, attempting browser Web Speech fallback:', err);
+    console.warn('Rust Neural TTS failed, attempting browser Web Speech fallback:', err);
   }
 
-  // Fallback to Web Speech API
+  // Fallback to Web Speech API with Natural Voice Filtering
   if (typeof window !== 'undefined' && window.speechSynthesis) {
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = voice.startsWith('hi') ? 'hi-IN' : 'en-US';
+    const targetLang = voice.startsWith('hi') ? 'hi-IN' : 'en-US';
+    utterance.lang = targetLang;
+
+    const availableVoices = window.speechSynthesis.getVoices();
+    const naturalVoice = availableVoices.find(v =>
+      (v.lang.startsWith(targetLang.slice(0, 2))) &&
+      (v.name.includes('Natural') || v.name.includes('Neural') || v.name.includes('Google') || v.name.includes('Online'))
+    ) || availableVoices.find(v => v.lang.startsWith(targetLang.slice(0, 2)));
+
+    if (naturalVoice) {
+      utterance.voice = naturalVoice;
+    }
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
     window.speechSynthesis.speak(utterance);
   }
 }

@@ -7,6 +7,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import * as vscode from 'vscode';
 import { ToolDispatcher } from './tools';
 import { PathGuard } from './pathGuard';
+import { setStatusBar } from './extension';
 
 const ALLOWED_ORIGINS = [
   'null',
@@ -112,28 +113,40 @@ export class BoloWebSocketServer {
             const params = message.parameters || message.params || {};
             const isConfirmed = Boolean(message.confirmed || message.user_confirmed);
 
-            const result = await ToolDispatcher.executeTool(
-              toolName,
-              params,
-              isConfirmed
-            );
+            setStatusBar('busy', this.port);
+            try {
+              const result = await ToolDispatcher.executeTool(
+                toolName,
+                params,
+                isConfirmed
+              );
 
-            if (result && result.needsConfirmation) {
+              if (result && result.needsConfirmation) {
+                ws.send(JSON.stringify({
+                  type: 'tool_response',
+                  request_id: requestId,
+                  success: false,
+                  needsConfirmation: true,
+                  error: 'REQUIRES_CONFIRMATION',
+                  reason: result.reason
+                }));
+              } else {
+                ws.send(JSON.stringify({
+                  type: 'tool_response',
+                  request_id: requestId,
+                  success: true,
+                  data: result
+                }));
+              }
+            } catch (toolErr: any) {
               ws.send(JSON.stringify({
                 type: 'tool_response',
                 request_id: requestId,
                 success: false,
-                needsConfirmation: true,
-                error: 'REQUIRES_CONFIRMATION',
-                reason: result.reason
+                error: toolErr.message || String(toolErr)
               }));
-            } else {
-              ws.send(JSON.stringify({
-                type: 'tool_response',
-                request_id: requestId,
-                success: true,
-                data: result
-              }));
+            } finally {
+              setStatusBar('connected', this.port);
             }
           }
         } catch (err: any) {

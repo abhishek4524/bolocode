@@ -22,10 +22,38 @@ export class FileOps {
     return { path: uri.fsPath, message: `File written successfully at ${uri.fsPath}` };
   }
 
-  public static async editFile(params: { path: string; search: string; replace: string }) {
+  public static async editFile(params: { path: string; search?: string; replace: string; line?: number }) {
     const uri = PathGuard.resolveUri(params.path);
     const uint8arr = await vscode.workspace.fs.readFile(uri);
     const content = Buffer.from(uint8arr).toString('utf8');
+    const lines = content.split(/\r?\n/);
+
+    if (params.line !== undefined && params.line !== null) {
+      const lineNum = Math.trunc(params.line);
+      if (lineNum < 1) {
+        throw new Error(`Invalid line number: ${params.line}`);
+      }
+      while (lines.length < lineNum - 1) {
+        lines.push('');
+      }
+
+      if (params.search && params.search.trim().length > 0) {
+        if (lineNum <= lines.length) {
+          lines[lineNum - 1] = lines[lineNum - 1].replace(params.search, params.replace);
+        } else {
+          lines.push(params.replace);
+        }
+      } else {
+        lines.splice(lineNum - 1, 0, params.replace);
+      }
+      const updatedContent = lines.join('\n');
+      await vscode.workspace.fs.writeFile(uri, Buffer.from(updatedContent, 'utf8'));
+      return { path: uri.fsPath, message: `File updated successfully at ${uri.fsPath} (line ${lineNum})` };
+    }
+
+    if (!params.search || params.search.trim().length === 0) {
+      throw new Error(`Target search string cannot be empty. Specify a line number or provide an exact non-empty search string.`);
+    }
 
     if (!content.includes(params.search)) {
       throw new Error(`Target search string not found in file ${uri.fsPath}`);

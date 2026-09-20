@@ -1,20 +1,35 @@
 {
   "name": "bolocode-extension",
-  "displayName": "BoloCode VS Code Integration",
-  "description": "Local WebSocket server and tool execution engine for BoloCode voice agent",
+  "displayName": "BoloCode — Voice Coding Agent",
+  "description": "Local WebSocket bridge for the BoloCode voice-first coding agent. Controls VS Code hands-free using natural Hindi, English, or Hinglish speech.",
   "version": "0.1.0",
   "publisher": "bolocode",
+  "icon": "images/icon.png",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/abhishek4524/bolocode.git"
   },
+  "homepage": "https://github.com/abhishek4524/bolocode#readme",
+  "bugs": {
+    "url": "https://github.com/abhishek4524/bolocode/issues"
+  },
+  "galleryBanner": {
+    "color": "#0B1020",
+    "theme": "dark"
+  },
+  "keywords": [
+    "voice", "speech", "hindi", "hinglish", "coding assistant",
+    "hands-free", "accessibility", "ai agent", "bolocode", "voice control"
+  ],
+  "categories": [
+    "Other",
+    "Programming Languages",
+    "AI"
+  ],
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": [
-    "Other"
-  ],
   "activationEvents": [
     "onStartupFinished"
   ],
@@ -23,15 +38,18 @@
     "commands": [
       {
         "command": "bolocode.startServer",
-        "title": "BoloCode: Start Voice Agent Server"
+        "title": "BoloCode: Start Voice Agent Server",
+        "icon": "$(mic)"
       },
       {
         "command": "bolocode.stopServer",
-        "title": "BoloCode: Stop Voice Agent Server"
+        "title": "BoloCode: Stop Voice Agent Server",
+        "icon": "$(debug-stop)"
       },
       {
         "command": "bolocode.showConnectionInfo",
-        "title": "BoloCode: Show Connection Info"
+        "title": "BoloCode: Show Connection Info",
+        "icon": "$(info)"
       }
     ]
   },
@@ -41,7 +59,7 @@
     "watch": "tsc -w -p ./",
     "build": "esbuild src/extension.ts --bundle --platform=node --target=node18 --external:vscode --outfile=out/extension.js",
     "test": "jest --testPathPattern=src/__tests__ --passWithNoTests",
-    "package": "vsce package --no-git-tag-version"
+    "package": "npx @vscode/vsce package --no-git-tag-version"
   },
   "jest": {
     "preset": "ts-jest",

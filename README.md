@@ -1,8 +1,13 @@
+<p align="center">
+  <img src="branding/logo.png" alt="BoloCode Logo" width="120" />
+</p>
+
 # BoloCode — Voice-First Coding Agent for Visual Studio Code
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
 [![Platform: Windows | macOS | Linux](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)]()
+
 
 **BoloCode** is a downloadable, open-source voice-first coding assistant desktop application for Windows, macOS, and Linux. It allows developers to control Visual Studio Code entirely hands-free using natural speech in **Hindi**, **English**, or **Hinglish**.
 

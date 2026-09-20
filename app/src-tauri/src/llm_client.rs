@@ -111,35 +111,60 @@ pub async fn chat_completion(
 }
 
 async fn send_groq_request(client: &Client, key: &str, body: &Value) -> Result<LlmChatResult, String> {
-    let res = client
-        .post("https://api.groq.com/openai/v1/chat/completions")
-        .bearer_auth(key)
-        .json(body)
-        .send()
-        .await
-        .map_err(|e| {
-            if e.is_timeout() {
-                format!("Groq request timed out after {}s.", LLM_HTTP_TIMEOUT.as_secs())
-            } else if e.is_connect() {
-                "Groq connection failed — check your internet connection.".to_string()
-            } else {
-                format!("Groq network error: {}", e)
-            }
-        })?;
+    let primary_model = body.get("model").and_then(|m| m.as_str()).unwrap_or("llama-3.3-70b-specdec");
+    let candidate_models = vec![
+        primary_model,
+        "llama-3.3-70b-specdec",
+        "llama-3.1-70b-versatile",
+        "llama3-70b-8192",
+    ];
 
-    if res.status().is_success() {
-        let val: Value = res.json().await.map_err(|e| e.to_string())?;
-        let model_used = body.get("model").and_then(|m| m.as_str()).unwrap_or("groq");
-        if let Some(mut parsed) = parse_llm_response(&val) {
-            parsed.provider_used = format!("Groq ({})", model_used);
-            return Ok(parsed);
+    let mut last_err = String::new();
+
+    for model_name in candidate_models {
+        let mut current_body = body.clone();
+        current_body["model"] = json!(model_name);
+
+        let res = match client
+            .post("https://api.groq.com/openai/v1/chat/completions")
+            .bearer_auth(key)
+            .json(&current_body)
+            .send()
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                if e.is_timeout() {
+                    return Err(format!("Groq request timed out after {}s.", LLM_HTTP_TIMEOUT.as_secs()));
+                } else if e.is_connect() {
+                    return Err("Groq connection failed — check your internet connection.".to_string());
+                } else {
+                    return Err(format!("Groq network error: {}", e));
+                }
+            }
+        };
+
+        if res.status().is_success() {
+            let val: Value = res.json().await.map_err(|e| e.to_string())?;
+            if let Some(mut parsed) = parse_llm_response(&val) {
+                parsed.provider_used = format!("Groq ({})", model_name);
+                return Ok(parsed);
+            }
+            return Err("Failed to parse Groq response structure".to_string());
+        } else {
+            let status = res.status();
+            let text = res.text().await.unwrap_or_default();
+
+            if status.as_u16() == 404 || text.contains("model_not_found") {
+                last_err = format!("Groq HTTP {}: {}", status, text);
+                continue;
+            } else {
+                return Err(format!("Groq HTTP {}: {}", status, text));
+            }
         }
-        Err("Failed to parse Groq response structure".to_string())
-    } else {
-        let status = res.status();
-        let text = res.text().await.unwrap_or_default();
-        Err(format!("Groq HTTP {}: {}", status, text))
     }
+
+    Err(last_err)
 }
 
 fn parse_llm_response(val: &Value) -> Option<LlmChatResult> {
@@ -148,11 +173,23 @@ fn parse_llm_response(val: &Value) -> Option<LlmChatResult> {
 
     let mut tool_calls = Vec::new();
     if let Some(tc_arr) = message.get("tool_calls").and_then(|tc| tc.as_array()) {
-        for tc in tc_arr {
-            let id = tc.get("id")?.as_str()?.to_string();
-            let name = tc.get("function")?.get("name")?.as_str()?.to_string();
-            let args_str = tc.get("function")?.get("arguments")?.as_str()?;
-            let arguments: Value = serde_json::from_str(args_str).unwrap_or(json!({}));
+        for (idx, tc) in tc_arr.iter().enumerate() {
+            let id = tc
+                .get("id")
+                .and_then(|i| i.as_str())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| format!("call_{}", idx));
+
+            let name = match tc.get("function").and_then(|f| f.get("name")).and_then(|n| n.as_str()) {
+                Some(n) => n.to_string(),
+                None => continue,
+            };
+
+            let arguments: Value = match tc.get("function").and_then(|f| f.get("arguments")) {
+                Some(Value::String(s)) => serde_json::from_str(s).unwrap_or(json!({})),
+                Some(v @ Value::Object(_)) => v.clone(),
+                _ => json!({}),
+            };
 
             tool_calls.push(ToolCallRequest { id, name, arguments });
         }

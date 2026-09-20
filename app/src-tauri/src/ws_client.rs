@@ -172,7 +172,9 @@ pub async fn connect_and_execute_tool(
                     Err(e) => return Err(format!("Invalid JSON response: {}", e)),
                 };
 
-                if resp_val.get("type").and_then(|t| t.as_str()) == Some("tool_response") {
+                let msg_type = resp_val.get("type").and_then(|t| t.as_str()).unwrap_or("");
+
+                if msg_type == "tool_response" {
                     if resp_val.get("needsConfirmation").and_then(|c| c.as_bool()) == Some(true) {
                         let reason = resp_val
                             .get("reason")
@@ -193,6 +195,13 @@ pub async fn connect_and_execute_tool(
                         log_error!("STAGE 3 [Tool Exec]: Tool '{}' returned error: {}", tool_name, err_str);
                         return Err(err_str.to_string());
                     }
+                } else if msg_type == "error" {
+                    let err_str = resp_val
+                        .get("error")
+                        .and_then(|e| e.as_str())
+                        .unwrap_or("WebSocket error response from extension");
+                    log_error!("STAGE 3 [Tool Exec]: Extension error: {}", err_str);
+                    return Err(err_str.to_string());
                 }
             } else if let Message::Close(frame) = msg {
                 // Stage G: Close code and reason logging

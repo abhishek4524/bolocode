@@ -57,6 +57,8 @@ pub fn run() {
             clear_wakeword_samples_cmd,
             build_wakeword_model_cmd,
             test_wakeword_audio_cmd,
+            toggle_mute_cmd,
+            toggle_pause_listening_cmd,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

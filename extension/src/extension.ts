@@ -5,23 +5,25 @@ import { PathGuard } from './pathGuard';
 let server: BoloWebSocketServer | null = null;
 let statusBarItem: vscode.StatusBarItem | null = null;
 
+type StatusState = 'disconnected' | 'connected' | 'busy';
+
 export async function activate(context: vscode.ExtensionContext) {
   console.log('BoloCode Extension activating...');
 
-  // 1. Create Status Bar Item
+  // 1. Create Status Bar Item (right side, high priority so it stays visible)
   statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   statusBarItem.command = 'bolocode.showConnectionInfo';
   context.subscriptions.push(statusBarItem);
-  updateStatusBar(false, 0);
+  setStatusBar('disconnected', 0);
 
   // 2. Start WebSocket server on 127.0.0.1 free port
   server = new BoloWebSocketServer();
   try {
     const info = await server.start();
-    updateStatusBar(true, info.port);
+    setStatusBar('connected', info.port);
   } catch (err: any) {
     vscode.window.showErrorMessage(`Failed to start BoloCode WebSocket server: ${err.message}`);
-    updateStatusBar(false, 0);
+    setStatusBar('disconnected', 0);
   }
 
   // 3. Update lastFocused timestamp when VS Code window gains focus
@@ -37,9 +39,10 @@ export async function activate(context: vscode.ExtensionContext) {
     if (!server) {
       server = new BoloWebSocketServer();
       const info = await server.start();
-      updateStatusBar(true, info.port);
+      setStatusBar('connected', info.port);
+      vscode.window.showInformationMessage(`BoloCode server started on port ${info.port}.`);
     } else {
-      vscode.window.showInformationMessage(`BoloCode server is running on port ${server.getPort()}`);
+      vscode.window.showInformationMessage(`BoloCode server is already running on port ${server.getPort()}`);
     }
   });
 
@@ -47,7 +50,7 @@ export async function activate(context: vscode.ExtensionContext) {
     if (server) {
       server.stop();
       server = null;
-      updateStatusBar(false, 0);
+      setStatusBar('disconnected', 0);
       vscode.window.showInformationMessage('BoloCode server stopped.');
     }
   });
@@ -57,30 +60,51 @@ export async function activate(context: vscode.ExtensionContext) {
       const port = server.getPort();
       const workspace = PathGuard.getWorkspaceRoot() || 'No workspace open';
       vscode.window.showInformationMessage(
-        `BoloCode Server Active | Port: ${port} | Workspace: ${workspace} | PID: ${process.pid}`
+        `$(mic) BoloCode Active | Port: ${port} | Workspace: ${workspace} | PID: ${process.pid}`
       );
     } else {
-      vscode.window.showWarningMessage('BoloCode server is currently disconnected.');
+      vscode.window.showWarningMessage('$(debug-disconnect) BoloCode server is currently disconnected. Use "BoloCode: Start Voice Agent Server" to restart.');
     }
   });
 
   context.subscriptions.push(startCmd, stopCmd, infoCmd);
 }
 
-function updateStatusBar(connected: boolean, port: number) {
+/**
+ * Update the VS Code status bar item.
+ * States:
+ *   connected   → $(mic) BoloCode  (green)
+ *   disconnected → $(debug-disconnect) BoloCode  (error red)
+ *   busy        → $(sync~spin) BoloCode  (warning yellow)
+ */
+function setStatusBar(state: StatusState, port: number) {
   if (!statusBarItem) return;
 
-  if (connected) {
-    statusBarItem.text = `$(radio-tower) BoloCode: Connected (${port})`;
-    statusBarItem.tooltip = `BoloCode server running on 127.0.0.1:${port}. Click for connection info.`;
-    statusBarItem.backgroundColor = undefined;
-    statusBarItem.show();
-  } else {
-    statusBarItem.text = `$(error) BoloCode: Disconnected`;
-    statusBarItem.tooltip = `BoloCode server is disconnected. Click for info.`;
-    statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
-    statusBarItem.show();
+  switch (state) {
+    case 'connected':
+      statusBarItem.text = `$(mic) BoloCode`;
+      statusBarItem.tooltip = `BoloCode — Connected on 127.0.0.1:${port}\nClick for connection info.`;
+      statusBarItem.backgroundColor = undefined;
+      statusBarItem.color = new vscode.ThemeColor('statusBarItem.prominentForeground');
+      break;
+
+    case 'busy':
+      statusBarItem.text = `$(sync~spin) BoloCode`;
+      statusBarItem.tooltip = `BoloCode — Processing voice command…`;
+      statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+      statusBarItem.color = undefined;
+      break;
+
+    case 'disconnected':
+    default:
+      statusBarItem.text = `$(debug-disconnect) BoloCode`;
+      statusBarItem.tooltip = `BoloCode — Disconnected. Click for info.`;
+      statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
+      statusBarItem.color = undefined;
+      break;
   }
+
+  statusBarItem.show();
 }
 
 export function deactivate() {
@@ -89,3 +113,6 @@ export function deactivate() {
     server = null;
   }
 }
+
+// Exported so wsServer can drive status bar state changes
+export { setStatusBar };

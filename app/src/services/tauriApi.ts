@@ -29,6 +29,9 @@ export interface AppConfig {
   wake_word_sensitivity: number;
   custom_wakeword_path: string;
   onboarding_done: boolean;
+  mute_agent_voice?: boolean;
+  pause_listening?: boolean;
+  speak_progress_updates?: boolean;
 }
 
 export interface CallToolResult {
@@ -154,5 +157,13 @@ export const tauriApi = {
 
   testWakewordAudio: async (audioBase64: string, sensitivity?: number): Promise<WakewordTestResult> => {
     return invoke('test_wakeword_audio_cmd', { audioBase64, sensitivity });
+  },
+
+  toggleMute: async (): Promise<boolean> => {
+    return invoke('toggle_mute_cmd');
+  },
+
+  togglePauseListening: async (): Promise<boolean> => {
+    return invoke('toggle_pause_listening_cmd');
   },
 };
